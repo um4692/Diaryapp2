@@ -1,32 +1,44 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from datetime import datetime
+from typing import List
 
-app = Flask(__name__)
-app.secret_key = 'your_secret_key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///diary.db'
-db = SQLAlchemy(app)
+app = FastAPI()
 
-class DiaryEntry(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.DateTime, default=datetime.now)
-    entry = db.Column(db.Text)
+# データモデル
+class Entry(BaseModel):
+    id: int
+    title: str
+    content: str
+    created_at: datetime
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        entry_text = request.form['entry']
+# データベースの初期エントリー
+entries = []
 
-        new_entry = DiaryEntry(entry=entry_text)
-        db.session.add(new_entry)
-        db.session.commit()
+# ホームページ
+@app.get('/')
+async def home():
+    return entries
 
-        flash("日記エントリーが保存されました。")
-        return redirect(url_for('index'))
+# 新しいエントリーを作成
+@app.post('/new_entry/')
+async def new_entry(title: str, content: str):
+    entry_id = len(entries) + 1
+    created_at = datetime.now()
+    entry = Entry(id=entry_id, title=title, content=content, created_at=created_at)
+    entries.append(entry)
+    return entry
 
-    entries = DiaryEntry.query.order_by(DiaryEntry.date.desc()).all()
-    return render_template('index.html', entries=entries)
+# エントリーを取得
+@app.get('/entry/{entry_id}')
+async def get_entry(entry_id: int):
+    for entry in entries:
+        if entry.id == entry_id:
+            return entry
+    raise HTTPException(status_code=404, detail="Entry not found")
 
-if __name__ == '__main__':
-    db.create_all()
-    app.run(debug=True)
+# すべてのエントリーを取得
+@app.get('/entries/')
+async def get_entries():
+    return entries
+
